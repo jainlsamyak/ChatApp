@@ -10,14 +10,15 @@ export const signup = async (req, res) => {
     if (!fullName || !email || !password) {
       return res.status(400).json({ message: "All fields are mandatory" });
     }
-
     if (password.length < 6) {
       return res
         .status(400)
         .json({ message: "Password must be atleast 6 characters" });
     }
     const user = await User.findOne({ email });
-    if (user) return res.status(400).json({ message: "Email already exists" });
+    if (user) {
+      return res.status(400).json({ message: "Email already exists" });
+    }
 
     const salt = await bcrypt.genSalt(10);
     const hashpassword = await bcrypt.hash(password, salt);
@@ -28,14 +29,12 @@ export const signup = async (req, res) => {
     });
 
     if (newUser) {
-      // JWT token
       const { fullName, email, password, _id } = newUser;
-
       generateToken(_id, res);
       await newUser.save();
       res.status(200).json({ _id: _id, Name: fullName, email: email });
     } else {
-      res.status(400).send.json({ message: "Invalid user data" });
+      res.status(400).json({ message: "Invalid user data" });
     }
   } catch (error) {
     console.log("Error in signup controller:", error.message);
@@ -59,6 +58,7 @@ export const login = async (req, res) => {
     res.status(200).json({
       _id: user._id,
       fullName: user.fullName,
+      email: user.email,
     });
   } catch (error) {
     console.log(`Login Error:`, error.message);
@@ -75,19 +75,24 @@ export const logout = async (req, res) => {
 
 export const updateProfile = async (req, res) => {
   try {
-    const profilePic = req.body;
+    const { profilePic } = req.body;
     const userId = req.user._id;
 
-    if (!profilePic) {
-      return res.status(400).json({ message: "Profile pic is required" });
+    if (!profilePic || typeof profilePic !== "string") {
+      return res.status(400).json({ message: "Profile pic must be a valid base64 string" });
     }
-    const uploadResponse = await cloudinary.uploader.upload(profilePic);
+
+    console.log("Received profilePic:", profilePic.substring(0, 30)); // Log first 30 chars to check format
+
+    const uploadResponse = await cloudinary.uploader.upload(profilePic, { // Optional: Organize in a folder
+      allowed_formats: ["jpg", "png", "jpeg"], // Restrict formats
+    });
+
     const updateUser = await User.findByIdAndUpdate(
       userId,
       { profilePic: uploadResponse.secure_url },
       { new: true }
     );
-    res.status(200).json(updateUser);
   } catch (error) {
     console.log(`error in update profile:${error}`);
     res.status(500).json("Internal Server Error");
